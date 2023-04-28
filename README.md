@@ -1,6 +1,6 @@
 # MIMO_Model
 
-This is a implimentation of a research paper, which consist of multilevel input and output deep learning model, it is made to deblur the images captured by a mobile. We can run the above code by:
+This is a implimentation of a research paper, which consist of multilevel input and output deep learning model, it is made to deblur the images captured by a mobile. We can run the above code by: (before that please change the paths as per requirement)
 
 Python training.py
 
