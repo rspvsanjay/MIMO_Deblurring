@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
-batch_size = 8
+batch_size = 16
 patch_size = (256, 256)
 num_patches = 12  # number of patches per image
 num_channels = 3  # assuming RGB images
@@ -25,6 +25,10 @@ def generate_patches(img1, img2, num_patches, patch_size):
         y = np.random.randint(0, h - patch_size[1] + 1)
         patch1 = img1[y:y+patch_size[1], x:x+patch_size[0], :]
         patch2 = img2[y:y+patch_size[1], x:x+patch_size[0], :]
+        # apply horizontal flip to the patch with a 50% probability
+        if np.random.rand() > 0.5:
+            patch1 = cv2.flip(patch1, 1)
+            patch2 = cv2.flip(patch2, 1)
         patches1.append(patch1)
         patches2.append(patch2)
     return patches1, patches2
