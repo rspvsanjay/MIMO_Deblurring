@@ -1,13 +1,13 @@
 import re
 import os
 import time 
+import random
 import numpy as np
 import tensorflow as tf
 from datetime import datetime
 from networks import MIMO_Network
 from dataloader import create_dataset
-#load data
-train_data = create_dataset("/content/drive/MyDrive/StartCoding/input_train20.txt", "/content/drive/MyDrive/StartCoding/output_train20.txt")
+
 #load Networks
 model = MIMO_Network()
 # define the loss function
@@ -87,21 +87,71 @@ def train_step(inputs, targets):
 
     return loss1
 
+# read input and output paths from text files
+input_file = "/content/drive/MyDrive/StartCode3/input_train.txt"
+output_file = "/content/drive/MyDrive/StartCode3/output_train.txt"
+with open(input_file, 'r') as f:
+    input_paths = f.read().splitlines()
+with open(output_file, 'r') as f:
+    output_paths = f.read().splitlines()
+
+index = []
+for num1 in range(len(output_paths)):
+    index.append(num1)
+print("index: ", index)
+
+def indexing(index, lengthOfBatch):
+    random.shuffle(index)
+    length = len(output_paths)/lengthOfBatch # 25 is batch size for a epoch
+    index2 =  [0] * round(length)
+    for num1 in range(round(length)):
+        index3 = []
+        for num2 in range(num1*lengthOfBatch, (num1+1)*lengthOfBatch):
+            if num2<len(index):
+                index3.append(index[num2])
+        index2[num1] = index3
+    return index2
+index4 = indexing(index, 25)
+input_batch_path = []
+output_batch_path = []
+for num1 in range(len(index4[0])):
+    input_batch_path.append(input_paths[index4[0][num1]])
+    output_batch_path.append(output_paths[index4[0][num1]])
+#load data
+train_data = create_dataset(input_batch_path, output_batch_path)
+print("train_data: ", len(train_data))
+numberofbatch = len(index4)
 num_epochs = 4000
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
-    start_time = time.time()  # record start time
-    numberofbatch = 0
-    for step, (inputs, targets) in enumerate(train_data):
-        start_timeb = time.time()  # record start time
-        loss = train_step(inputs, targets)  
-        numberofbatch = numberofbatch + 1
-        end_timeb = time.time()  # record end time 
-    end_time = time.time()  # record end time 
-    print("Epoch {}: Loss = {}, Time taken over a epoch/batch = {:.2f}s, Number of mini-batch: {}, Time taken over a mini-bacth: {} ".format(epoch+1, loss.numpy(), end_time - start_time, numberofbatch, end_timeb - start_timeb))
-    # save checkpoint every 30 epoch
-    if (epoch + 1) % 30 == 0:
+    for number1 in range(numberofbatch-1):
+        start_time = time.time()  # record start time
+        numberofminibatch = len(train_data)
+        for step, (inputs, targets) in enumerate(train_data):
+            start_timeb = time.time()  # record start time
+            loss = train_step(inputs, targets) 
+            end_timeb = time.time()  # record end time 
+        end_time = time.time()  # record end time 
+        print("Epoch {}: Loss = {}, Time taken over a batch = {:.2f}s, Number of mini-batch: {}, Time taken over a mini-bacth: {} ".format(epoch+1, loss.numpy(), end_time - start_time, numberofminibatch, end_timeb - start_timeb))
+        # add loss to TensorBoard
+        with tf.summary.create_file_writer(log_dir).as_default():
+            tf.summary.scalar('loss', loss, step=step)
+        # create the list of paths
+        for num1 in range(len(index4[number1+1])):
+            input_batch_path.append(input_paths[index4[number1+1][num1]])
+            output_batch_path.append(output_paths[index4[number1+1][num1]])
+        #load data
+        train_data = create_dataset(input_batch_path, output_batch_path)
+        # save checkpoint every 30 epoch
+    if (epoch + 1) % 1 == 0:
         checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))    
-    # add loss to TensorBoard
-    with tf.summary.create_file_writer(log_dir).as_default():
-        tf.summary.scalar('loss', loss, step=step)
+
+    random.shuffle(index)
+    print("shuffled index: ", index)
+    index4 = indexing(index, 25)
+    input_batch_path = []
+    output_batch_path = []
+    for num1 in range(len(index4[0])):
+        input_batch_path.append(input_paths[index4[0][num1]])
+    #load data
+    train_data = create_dataset(input_batch_path, output_batch_path)
