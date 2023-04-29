@@ -100,7 +100,7 @@ for epoch in range(epoch_to_restore, num_epochs):
     end_time = time.time()  # record end time 
     print("Epoch {}: Loss = {}, Time taken over a epoch/batch = {:.2f}s, Number of mini-batch: {}, Time taken over a mini-bacth: {} ".format(epoch+1, loss.numpy(), end_time - start_time, numberofbatch, end_timeb - start_timeb))
     # save checkpoint every 30 epoch
-    if (epoch + 1) % 1 == 0:
+    if (epoch + 1) % 30 == 0:
         checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))    
     # add loss to TensorBoard
     with tf.summary.create_file_writer(log_dir).as_default():
