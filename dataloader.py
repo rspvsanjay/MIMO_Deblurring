@@ -38,13 +38,7 @@ def preprocess_patches(patches):
     return np.array(patches)
 
 # define dataset loader
-def create_dataset(input_file, output_file):
-    # read input and output paths from text files
-    with open(input_file, 'r') as f:
-        input_paths = f.read().splitlines()
-    with open(output_file, 'r') as f:
-        output_paths = f.read().splitlines()
-
+def create_dataset(input_paths, output_paths):
     inimages = []
     gtimages = []
     for input_path, output_path in zip(input_paths, output_paths):
