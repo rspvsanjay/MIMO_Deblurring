@@ -1,5 +1,6 @@
 import re
 import os
+import time 
 import numpy as np
 import tensorflow as tf
 from datetime import datetime
@@ -12,11 +13,13 @@ model = MIMO_Network()
 # define the loss function
 mse_loss_fn = tf.keras.losses.MeanSquaredError()
 
-# define the optimizer
-# optimizer = tf.keras.optimizers.Adam()
-optimizer = tf.keras.optimizers.legacy.Adam()
+# define the optimizer with a learning rate schedule
+initial_learning_rate = 1e-4
+lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps=500, decay_rate=0.5, staircase=True)
+optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
 # Use the legacy optimizer tf.keras.optimizers.legacy.Adam instead of the tf.keras.optimizers.Adam. 
 # The legacy optimizer does not require the list of variables to be registered separately.
+
 # set up the checkpoint
 checkpoint_dir = '/content/drive/MyDrive/StartCode3/training_checkpoints'
 checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
@@ -44,6 +47,7 @@ def train_step(inputs, targets):
     targets1 = targets
     targets2 = tf.image.resize(targets1, [tf.shape(targets1)[1]//2, tf.shape(targets1)[2]//2])
     targets3 = tf.image.resize(targets2, [tf.shape(targets2)[1]//2, tf.shape(targets2)[2]//2])
+
     with tf.GradientTape() as tape3, tf.GradientTape() as tape2, tf.GradientTape() as tape1:
         # forward pass
         pred3, pred2, pred1 = model(inputs, training=True)
@@ -72,31 +76,32 @@ def train_step(inputs, targets):
         fft1_loss = tf.reduce_mean(tf.abs(targets1_fft - preds1_fft))
         loss1 = (loss1 + loss2 + loss3)/3 + 0.1 * fft1_loss
 
-    # calculate gradients of level3
-    grads3 = tape3.gradient(loss3, model.get_layer("convo1k3s1f3l3").trainable_variables)
+    grads3 = tape3.gradient(loss3, model.get_layer("convo1k3s1f3l3").trainable_variables) # calculate gradients at level3
     optimizer.apply_gradients(zip(grads3, model.get_layer("convo1k3s1f3l3").trainable_variables)) # update weights
 
-    # calculate gradients of level2
-    grads2 = tape2.gradient(loss2, model.get_layer("convo1k3s1f3l2").trainable_variables)
+    grads2 = tape2.gradient(loss2, model.get_layer("convo1k3s1f3l2").trainable_variables) # calculate gradients at level2
     optimizer.apply_gradients(zip(grads2, model.get_layer("convo1k3s1f3l2").trainable_variables)) # update weights
     
-    # calculate gradients of level1
-    grads1 = tape1.gradient(loss1, model.trainable_variables)
+    grads1 = tape1.gradient(loss1, model.trainable_variables) # calculate gradients at level1
     optimizer.apply_gradients(zip(grads1, model.trainable_variables)) # update weights
 
     return loss1
 
-num_epochs = 20
+num_epochs = 4000
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
+    start_time = time.time()  # record start time
+    numberofbatch = 0
     for step, (inputs, targets) in enumerate(train_data):
-        loss = train_step(inputs, targets)        
-        # print loss every 10 steps
-        if (step + 1) % 4 == 0:
-            print("Step {}: Loss = {}".format(step, loss.numpy()))        
-        # save checkpoint every 100 steps
-        if (step + 1) % 4 == 0:
-            checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))    
+        start_timeb = time.time()  # record start time
+        loss = train_step(inputs, targets)  
+        numberofbatch = numberofbatch + 1
+        end_timeb = time.time()  # record end time 
+    end_time = time.time()  # record end time 
+    print("Epoch {}: Loss = {}, Time taken over a epoch/batch = {:.2f}s, Number of mini-batch: {}, Time taken over a mini-bacth: {} ".format(epoch+1, loss.numpy(), end_time - start_time, numberofbatch, end_timeb - start_timeb))
+    # save checkpoint every 30 epoch
+    if (epoch + 1) % 1 == 0:
+        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))    
     # add loss to TensorBoard
     with tf.summary.create_file_writer(log_dir).as_default():
         tf.summary.scalar('loss', loss, step=step)
