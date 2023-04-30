@@ -8,7 +8,7 @@ Python Create_Path_files.py
 
 Python training.py
 
-please change the paths as per requirement before running the above script.
+Please change the paths as per requirement before running the above script. Here, we have used the GoPro data set to train the model.
 
 This research project replicate the following research paper:
 
