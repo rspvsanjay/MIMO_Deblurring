@@ -8,38 +8,6 @@ from datetime import datetime
 from networks import MIMO_Network
 from dataloader import create_dataset
 
-#load Networks
-model = MIMO_Network()
-# define the loss function
-mse_loss_fn = tf.keras.losses.MeanSquaredError()
-
-# define the optimizer with a learning rate schedule
-initial_learning_rate = 1e-4
-lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps=500, decay_rate=0.5, staircase=True)
-optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
-# Use the legacy optimizer tf.keras.optimizers.legacy.Adam instead of the tf.keras.optimizers.Adam. 
-# The legacy optimizer does not require the list of variables to be registered separately.
-
-# set up the checkpoint
-checkpoint_dir = '/content/drive/MyDrive/StartCode3/training_checkpoints'
-checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
-checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
-
-# restore the latest checkpoint (if it exists)
-epoch_to_restore = 0
-latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
-if latest_checkpoint:
-    # extract the epoch number from the checkpoint file name
-    checkpoint_prefix = os.path.join(checkpoint_dir, "")
-    match = re.search(r'ckpt_(\d+)', latest_checkpoint)
-    if match:
-        epoch_to_restore = int(match.group(1))
-    print("epoch_to_restore: ", epoch_to_restore)
-    checkpoint.restore(latest_checkpoint)
-
-# set up the TensorBoard callback
-log_dir = "/content/drive/MyDrive/StartCode3/logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 # set up the training loop
 @tf.function
@@ -119,7 +87,41 @@ for num1 in range(len(index4[0])):
 #load data
 train_data = create_dataset(input_batch_path, output_batch_path)
 numberofbatch = len(index4)
-num_epochs = 4#000
+
+#load Networks
+model = MIMO_Network()
+# define the loss function
+mse_loss_fn = tf.keras.losses.MeanSquaredError()
+
+# define the optimizer with a learning rate schedule
+initial_learning_rate = 1e-4
+lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps=500, decay_rate=0.5, staircase=True)
+optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
+# Use the legacy optimizer tf.keras.optimizers.legacy.Adam instead of the tf.keras.optimizers.Adam. 
+# The legacy optimizer does not require the list of variables to be registered separately.
+
+# set up the checkpoint
+checkpoint_dir = '/content/drive/MyDrive/StartCode3/training_checkpoints'
+checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
+checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+
+# restore the latest checkpoint (if it exists)
+epoch_to_restore = 0
+latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+if latest_checkpoint:
+    # extract the epoch number from the checkpoint file name
+    # checkpoint_prefix = os.path.join(checkpoint_dir, "")
+    match = re.search(r'ckpt_(\d+)', latest_checkpoint)
+    if match:
+        epoch_to_restore = int(match.group(1))
+    print("epoch_to_restore: ", epoch_to_restore)
+    checkpoint.restore(latest_checkpoint)
+
+# set up the TensorBoard callback
+log_dir = "/content/drive/MyDrive/StartCode3/logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
+num_epochs = 4000
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
     start_time_epoch = time.time()  # record start time
@@ -148,13 +150,14 @@ for epoch in range(epoch_to_restore, num_epochs):
         tf.summary.scalar('loss', loss, step=epoch)
     # save checkpoint every 30 epoch
     if (epoch + 1) % 1 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))  
+        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))
+        print("checkpoint_prefix.format(epoch=epoch): ", checkpoint_prefix.format(epoch=epoch))  
     end_time_epoch = time.time()  # record end time  
     print("Epoch {} is completed: Loss = {}, Time taken to complete a epoch = {:.2f}s, Batch Number: {}/{},  Current Time: {} ".format(epoch+1, loss.numpy(), end_time_epoch - start_time_epoch, numberofbatch, numberofbatch, current_time))
     random.shuffle(index)
-    print("shuffled index: ", index)
+    # print("shuffled index: ", index)
     index4 = indexing(index, 25)
-    print("index4 length: ", len(index4))
+    # print("index4 length: ", len(index4))
     input_batch_path = []
     output_batch_path = []
     for num1 in range(len(index4[0])):
@@ -163,4 +166,4 @@ for epoch in range(epoch_to_restore, num_epochs):
     #load data
     train_data = create_dataset(input_batch_path, output_batch_path)
     print("data loaded")
-    print("data length: ", len(train_data))
+    # print("data length: ", len(train_data))
