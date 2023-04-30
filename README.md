@@ -4,6 +4,7 @@ This is an implimentation of a research paper, which is able to construct multil
 
 First we need to create text files which will consists of input and output paths with respect to two text files.
 Python Create_Path_files.py 
+
 Python training.py
 
 please change the paths as per requirement before running the above script.
