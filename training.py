@@ -122,19 +122,19 @@ numberofbatch = len(index4)
 num_epochs = 4#000
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
+    start_time_epoch = time.time()  # record start time
+    loss = 0
     for number1 in range(numberofbatch-1):
         start_time = time.time()  # record start time
         numberofminibatch = len(train_data)
+        mini_batch = 0
         for step, (inputs, targets) in enumerate(train_data):
             start_timeb = time.time()  # record start time
             loss = train_step(inputs, targets) 
             end_timeb = time.time()  # record end time 
         end_time = time.time()  # record end time 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print("Epoch {}: Loss = {}, Mini-batch Number: {}/{}, Time taken for a batch = {:.2f}s, Batch Number: {}/{},  Current Time: {} ".format(epoch+1, loss.numpy(),  step+1, numberofminibatch, end_time - start_time, number1+1, numberofbatch,  end_timeb - start_timeb, current_time))
-        # add loss to TensorBoard
-        with tf.summary.create_file_writer(log_dir).as_default():
-            tf.summary.scalar('loss', loss, step=step)
+        print("Epoch: {} in progress, Loss = {}, Total Number of Mini-batch: {}, Time taken for a mini-batch = {:.2f}s, Batch Number: {}/{}, Time taken for a batch = {:.2f}s, Current Time: {} ".format(epoch+1, loss.numpy(),  numberofminibatch, end_timeb - start_timeb, number1+1, numberofbatch, end_time - start_time, current_time))
         # create the list of paths
         input_batch_path = []
         output_batch_path = []
@@ -143,16 +143,24 @@ for epoch in range(epoch_to_restore, num_epochs):
             output_batch_path.append(output_paths[index4[number1+1][num1]])
         #load data
         train_data = create_dataset(input_batch_path, output_batch_path)
-        # save checkpoint every 30 epoch
+    # add loss to TensorBoard
+    with tf.summary.create_file_writer(log_dir).as_default():
+        tf.summary.scalar('loss', loss, step=epoch)
+    # save checkpoint every 30 epoch
     if (epoch + 1) % 1 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))    
-
+        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))  
+    end_time_epoch = time.time()  # record end time  
+    print("Epoch {} is completed: Loss = {}, Time taken to complete a epoch = {:.2f}s, Batch Number: {}/{},  Current Time: {} ".format(epoch+1, loss.numpy(), end_time_epoch - start_time_epoch, numberofbatch, numberofbatch, current_time))
     random.shuffle(index)
     print("shuffled index: ", index)
     index4 = indexing(index, 25)
+    print("index4 length: ", len(index4))
     input_batch_path = []
     output_batch_path = []
     for num1 in range(len(index4[0])):
         input_batch_path.append(input_paths[index4[0][num1]])
+        output_batch_path.append(output_paths[index4[0][num1]])
     #load data
     train_data = create_dataset(input_batch_path, output_batch_path)
+    print("data loaded")
+    print("data length: ", len(train_data))
