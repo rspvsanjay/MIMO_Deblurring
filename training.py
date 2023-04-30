@@ -131,7 +131,7 @@ for epoch in range(epoch_to_restore, num_epochs):
             end_timeb = time.time()  # record end time 
         end_time = time.time()  # record end time 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print("Epoch {}: Loss = {}, Time taken over a batch = {:.2f}s, Current Batch Index: {}, Number of batches: {}, Number of mini-batch: {}, Time taken over a mini-bacth: {}, Current Time: {} ".format(epoch+1, loss.numpy(), end_time - start_time, number1+1, numberofbatch, numberofminibatch, end_timeb - start_timeb, current_time))
+        print("Epoch {}: Loss = {}, Mini-batch Number: {}/{}, Time taken for a batch = {:.2f}s, Batch Number: {}/{},  Current Time: {} ".format(epoch+1, loss.numpy(),  step+1, numberofminibatch, end_time - start_time, number1+1, numberofbatch,  end_timeb - start_timeb, current_time))
         # add loss to TensorBoard
         with tf.summary.create_file_writer(log_dir).as_default():
             tf.summary.scalar('loss', loss, step=step)
