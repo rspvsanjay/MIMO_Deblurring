@@ -98,7 +98,6 @@ with open(output_file, 'r') as f:
 index = []
 for num1 in range(len(output_paths)):
     index.append(num1)
-print("index: ", index)
 
 def indexing(index, lengthOfBatch):
     random.shuffle(index)
@@ -119,9 +118,8 @@ for num1 in range(len(index4[0])):
     output_batch_path.append(output_paths[index4[0][num1]])
 #load data
 train_data = create_dataset(input_batch_path, output_batch_path)
-print("train_data: ", len(train_data))
 numberofbatch = len(index4)
-num_epochs = 4000
+num_epochs = 4#000
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
     for number1 in range(numberofbatch-1):
@@ -132,11 +130,14 @@ for epoch in range(epoch_to_restore, num_epochs):
             loss = train_step(inputs, targets) 
             end_timeb = time.time()  # record end time 
         end_time = time.time()  # record end time 
-        print("Epoch {}: Loss = {}, Time taken over a batch = {:.2f}s, Number of mini-batch: {}, Time taken over a mini-bacth: {} ".format(epoch+1, loss.numpy(), end_time - start_time, numberofminibatch, end_timeb - start_timeb))
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print("Epoch {}: Loss = {}, Time taken over a batch = {:.2f}s, Current Batch Index: {}, Number of batches: {}, Number of mini-batch: {}, Time taken over a mini-bacth: {}, Current Time: {} ".format(epoch+1, loss.numpy(), end_time - start_time, number1+1, numberofbatch, numberofminibatch, end_timeb - start_timeb, current_time))
         # add loss to TensorBoard
         with tf.summary.create_file_writer(log_dir).as_default():
             tf.summary.scalar('loss', loss, step=step)
         # create the list of paths
+        input_batch_path = []
+        output_batch_path = []
         for num1 in range(len(index4[number1+1])):
             input_batch_path.append(input_paths[index4[number1+1][num1]])
             output_batch_path.append(output_paths[index4[number1+1][num1]])
