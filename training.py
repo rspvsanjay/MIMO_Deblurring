@@ -124,7 +124,7 @@ optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
 # compile the model with loss and metric functions
 model.compile(optimizer=optimizer, loss=mae_loss_fn, metrics=[tf.keras.metrics.MeanAbsoluteError()])
 
-current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
 train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape1/' + current_time + '/train'
 train_summary_writer1 = tf.summary.create_file_writer(train_log_dir)
 train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape2/' + current_time + '/train'
