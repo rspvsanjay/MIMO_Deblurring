@@ -110,7 +110,7 @@ train_data = create_dataset(input_batch_path, output_batch_path)
 numberofbatch = len(index4)
 
 #load Networks
-model = MIMO_Network()
+model = MIMO_Network(True)
 # define the loss function
 mae_loss_fn = tf.keras.losses.MeanAbsoluteError()
 
@@ -125,9 +125,9 @@ optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
 model.compile(optimizer=optimizer, loss=mae_loss_fn, metrics=[tf.keras.metrics.MeanAbsoluteError()])
 
 current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape1/' + current_time + '/train'
+train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape/' + current_time + '/train1'
 train_summary_writer1 = tf.summary.create_file_writer(train_log_dir)
-train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape2/' + current_time + '/train'
+train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape/' + current_time + '/train1'
 train_summary_writer2 = tf.summary.create_file_writer(train_log_dir)
 # set up the checkpoint
 checkpoint_dir = '/content/drive/MyDrive/StartCode3/training_checkpoints'
@@ -136,6 +136,7 @@ checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
 
 # restore the latest checkpoint (if it exists)
 epoch_to_restore = 0
+batch_count = 0
 latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
 if latest_checkpoint:
     match = re.search(r'ckpt_(\d+)', latest_checkpoint) # extract the epoch number from the checkpoint file name
@@ -149,12 +150,12 @@ log_dir = "/content/drive/MyDrive/StartCode3/logs/fit/" + datetime.now().strftim
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 num_epochs = 4000
-batch_count = 0
+batch_count = numberofbatch*epoch_to_restore
 for epoch in range(epoch_to_restore, num_epochs):
     print("Epoch {}/{}".format(epoch+1, num_epochs))
     start_time_epoch = time.time()  # record start time
     loss = 0
-    for number1 in range(numberofbatch-1):
+    for number1 in range(numberofbatch):
         start_time = time.time()  # record start time
         numberofminibatch = len(train_data)
         mini_batch = 0
@@ -196,8 +197,8 @@ for epoch in range(epoch_to_restore, num_epochs):
     loss_at_level1_epoch.reset_states()
     # save checkpoint every 30 epoch
     if (epoch + 1) % 1 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch))
-        print("checkpoint_prefix.format(epoch=epoch): ", checkpoint_prefix.format(epoch=epoch))  
+        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch+1))
+        print("checkpoint_prefix.format(epoch=epoch): ", checkpoint_prefix.format(epoch=epoch+1))  
     end_time_epoch = time.time()  # record end time  
     print("Epoch {} is completed: Loss = {}, Batch Number: {}/{}, Time taken to complete a epoch = {:.2f}s, Current Time: {} ".format(epoch+1, loss.numpy(),  numberofbatch, numberofbatch, end_time_epoch - start_time_epoch, current_time))
     random.shuffle(index)
