@@ -1,213 +1,222 @@
-import re
-import os
-import time 
-import random
-import numpy as np
+from sklearn.model_selection import train_test_split
+from networks import MIMO_Deblur
+from dataloader import DataLoader
 import tensorflow as tf
-from datetime import datetime
-from networks import MIMO_Network
-from dataloader import create_dataset
+from PIL import Image
+import numpy as np
+import os
+import re
+# Load data using DataLoader
+input_file = "/content/drive/MyDrive/StartCode3/input_train_100.txt"
+output_file = "/content/drive/MyDrive/StartCode3/output_train_100.txt"
 
-loss_level1 = tf.keras.metrics.Mean('loss_level1', dtype=tf.float32)
-loss_level2 = tf.keras.metrics.Mean('loss_level2', dtype=tf.float32)
-loss_level3 = tf.keras.metrics.Mean('loss_level3', dtype=tf.float32)
-
-fft_loss_level1 = tf.keras.metrics.Mean('fft_loss_level1', dtype=tf.float32)
-fft_loss_level2 = tf.keras.metrics.Mean('fft_loss_level2', dtype=tf.float32)
-fft_loss_level3 = tf.keras.metrics.Mean('fft_loss_level3', dtype=tf.float32)
-loss_at_level1_epoch = tf.keras.metrics.Mean('loss_at_level1_epoch', dtype=tf.float32)
-
-# set up the training loop
-@tf.function
-def train_step(inputs, targets):
-    targets1 = targets
-    targets2 = tf.image.resize(targets1, [tf.shape(targets1)[1]//2, tf.shape(targets1)[2]//2])
-    targets3 = tf.image.resize(targets2, [tf.shape(targets2)[1]//2, tf.shape(targets2)[2]//2])
-
-    loss1 = 0
-    loss2 = 0
-    loss3 = 0
-
-    fft1_loss = 0
-    fft2_loss = 0
-    fft3_loss = 0
-    with tf.GradientTape() as tape3, tf.GradientTape() as tape2, tf.GradientTape() as tape1:
-        # forward pass
-        pred3, pred2, pred1 = model(inputs, training=True)
-        
-        # calculate loss of level3
-        loss3 = mae_loss_fn(targets3, pred3)
-        targets3_fft = tf.signal.fft(tf.cast(targets3, tf.complex64))
-        preds3_fft = tf.signal.fft(tf.cast(pred3, tf.complex64))
-        # calculate FFT loss
-        fft3_loss = tf.reduce_mean(tf.abs(targets3_fft - preds3_fft))
-        loss3 = loss3 + 0.1 * fft3_loss
-
-        # calculate loss of level2
-        loss2 = mae_loss_fn(targets2, pred2)
-        targets2_fft = tf.signal.fft(tf.cast(targets2, tf.complex64))
-        preds2_fft = tf.signal.fft(tf.cast(pred2, tf.complex64))
-        # calculate FFT loss
-        fft2_loss = tf.reduce_mean(tf.abs(targets2_fft - preds2_fft))
-        loss2 = (loss2 + loss3)/2 + 0.1 * fft2_loss
-
-        # calculate loss of level1
-        loss1 = mae_loss_fn(targets1, pred1)
-        targets1_fft = tf.signal.fft(tf.cast(targets1, tf.complex64))
-        preds1_fft = tf.signal.fft(tf.cast(pred1, tf.complex64))
-        # calculate FFT loss
-        fft1_loss = tf.reduce_mean(tf.abs(targets1_fft - preds1_fft))
-        loss1 = (loss1 + loss2 + loss3)/3 + 0.1 * fft1_loss
-
-    grads3 = tape3.gradient(loss3, model.get_layer("convo1k3s1f3l3").trainable_variables) # calculate gradients at level3
-    optimizer.apply_gradients(zip(grads3, model.get_layer("convo1k3s1f3l3").trainable_variables)) # update weights
-    loss_level3(loss3)
-    fft_loss_level3(fft3_loss)
-
-    grads2 = tape2.gradient(loss2, model.get_layer("convo1k3s1f3l2").trainable_variables) # calculate gradients at level2
-    optimizer.apply_gradients(zip(grads2, model.get_layer("convo1k3s1f3l2").trainable_variables)) # update weights
-    loss_level2(loss2)
-    fft_loss_level2(fft2_loss)
-    
-    grads1 = tape1.gradient(loss1, model.trainable_variables) # calculate gradients at level1
-    optimizer.apply_gradients(zip(grads1, model.trainable_variables)) # update weights
-    loss_level1(loss1)
-    fft_loss_level1(fft1_loss)
-
-    return loss1
-
-# read input and output paths from text files
-input_file = "/content/drive/MyDrive/StartCode3/input_train.txt"
-output_file = "/content/drive/MyDrive/StartCode3/output_train.txt"
 with open(input_file, 'r') as f:
     input_paths = f.read().splitlines()
+
 with open(output_file, 'r') as f:
     output_paths = f.read().splitlines()
 
-index = []
-for num1 in range(len(output_paths)):
-    index.append(num1)
+# Split the data into training and testing sets (90% training, 10% testing)
+input_paths_train, input_paths_test, output_paths_train, output_paths_test = train_test_split(
+    input_paths, output_paths, test_size=0.10, random_state=42
+)
 
-def indexing(index, lengthOfBatch):
-    random.shuffle(index)
-    length = len(output_paths)/lengthOfBatch # 25 is batch size for a epoch
-    index2 =  [0] * round(length)
-    for num1 in range(round(length)):
-        index3 = []
-        for num2 in range(num1*lengthOfBatch, (num1+1)*lengthOfBatch):
-            if num2<len(index):
-                index3.append(index[num2])
-        index2[num1] = index3
-    return index2
-index4 = indexing(index, 25)
-input_batch_path = []
-output_batch_path = []
-for num1 in range(len(index4[0])):
-    input_batch_path.append(input_paths[index4[0][num1]])
-    output_batch_path.append(output_paths[index4[0][num1]])
-#load data
-train_data = create_dataset(input_batch_path, output_batch_path)
-numberofbatch = len(index4)
+# Instantiate the AutoEncoder model
+num_filters = 64
+autoencoder = MIMO_Deblur()
+dataloader = DataLoader()
 
-#load Networks
-model = MIMO_Network(True)
-# define the loss function
-mae_loss_fn = tf.keras.losses.MeanAbsoluteError()
+# Define the optimizers
+optimizer1 = tf.keras.optimizers.Adam()
+optimizer2 = tf.keras.optimizers.Adam()
+optimizer3 = tf.keras.optimizers.Adam()
 
-# define the optimizer with a learning rate schedule
-initial_learning_rate = 1e-4
-lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate, decay_steps=500, decay_rate=0.5, staircase=True)
-optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=lr_schedule)
-# Use the legacy optimizer tf.keras.optimizers.legacy.Adam instead of the tf.keras.optimizers.Adam. 
-# The legacy optimizer does not require the list of variables to be registered separately.
+def deblur_image(img_path, model):
+    # Load the blurry image from the given path
+    img = Image.open(img_path)
+    # Convert the image to numpy array and normalize it to [0, 1]
+    img_array = np.array(img) / 255.0
+    # Expand the dimensions to create a batch of size 1
+    img_array = np.expand_dims(img_array, axis=0)
+    # Perform deblurring using the model
+    deblurred_array = model.predict(img_array)
+    # Convert the deblurred numpy array back to an image and scale it to [0, 255]
+    deblurred_img_array = np.squeeze(deblurred_array[2]) * 255.0
+    deblurred_img_array = np.clip(deblurred_img_array, 0, 255).astype(np.uint8)
+    deblurred_img = Image.fromarray(deblurred_img_array)
+    return deblurred_img
 
-# compile the model with loss and metric functions
-model.compile(optimizer=optimizer, loss=mae_loss_fn, metrics=[tf.keras.metrics.MeanAbsoluteError()])
+def save_deblurred_images(original_img_path, deblurred_img, gt_path, epoch):
+    original_dir, original_filename = os.path.split(original_img_path)
+    deblurred_dir = "/content/drive/MyDrive/StartCode3/deblurred_images/"
+    os.makedirs(deblurred_dir, exist_ok=True)
 
-current_time = datetime.now().strftime("%Y%m%d-%H%M%S")
-train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape/' + current_time + '/train1'
-train_summary_writer1 = tf.summary.create_file_writer(train_log_dir)
-train_log_dir = '/content/drive/MyDrive/StartCode3/logs/gradient_tape/' + current_time + '/train1'
-train_summary_writer2 = tf.summary.create_file_writer(train_log_dir)
-# set up the checkpoint
-checkpoint_dir = '/content/drive/MyDrive/StartCode3/training_checkpoints'
-checkpoint_prefix = os.path.join(checkpoint_dir, "ckpt_{epoch}")
-checkpoint = tf.train.Checkpoint(optimizer=optimizer, model=model)
+    # Save the blurred image
+    original_img = Image.open(original_img_path)
+    original_filename1 = "blur_" + original_filename
+    original_img_path = os.path.join(deblurred_dir, original_filename1)
+    original_img.save(original_img_path)
 
-# restore the latest checkpoint (if it exists)
-epoch_to_restore = 0
-batch_count = 0
+    # Save the deblurred image
+    deblurred_filename = "deblur_" + f'epoch{epoch:04d}_' + original_filename
+    deblurred_img_path = os.path.join(deblurred_dir, deblurred_filename)
+    deblurred_img.save(deblurred_img_path)
+
+    # Save the Sharp image
+    original_img = Image.open(gt_path)
+    original_dir, original_filename = os.path.split(gt_path)
+    original_filename2 = "sharp_"+ original_filename
+    original_img_path = os.path.join(deblurred_dir, original_filename2)
+    original_img.save(original_img_path)
+
+
+def fft_loss(y_true, y_pred):
+    # Compute the FFT of the ground-truth and predicted images
+    y_true_fft = tf.signal.fft2d(tf.cast(y_true, tf.complex64))
+    y_pred_fft = tf.signal.fft2d(tf.cast(y_pred, tf.complex64))
+    # Compute the absolute difference between the FFTs
+    fft_loss = tf.reduce_mean(tf.abs(y_true_fft - y_pred_fft))
+    return fft_loss
+
+    
+# Training loop using train_step
+batch_size = 16
+epochs = 3500
+
+losses1 = []
+losses2 = []
+losses3 = []
+fft_losses1 = []
+fft_losses2 = []
+fft_losses3 = []
+
+global_step = tf.Variable(initial_value=0, trainable=False, dtype=tf.int64)  # Create a global step variable
+
+@tf.function
+def train_step(inputs, targets):
+    # Resize targets by half using tf.image.resize
+    targets_half = tf.image.resize(targets, [tf.shape(targets)[1] // 2, tf.shape(targets)[2] // 2])
+    targets_fourth = tf.image.resize(targets, [tf.shape(targets)[1] // 4, tf.shape(targets)[2] // 4])
+    # print(targets_half.shape)
+    # print(targets_fourth.shape)
+    with tf.GradientTape() as tape3, tf.GradientTape() as tape2, tf.GradientTape() as tape1:
+        # Forward pass through the AutoEncoder model
+        fake_B = autoencoder(inputs, training=True)
+
+        # Compute loss and gradients for fake_B[0]
+        loss3 = tf.reduce_mean(tf.abs(fake_B[0] - targets_fourth))  # Using targets[2] for img_B_half2
+        loss_fft = fft_loss(targets_fourth, fake_B[0])
+        loss3 = loss3 + loss_fft * 0.01
+        losses3.append(loss3)
+        fft_losses3.append(loss_fft)
+
+        # Compute loss and gradients for fake_B[1]
+        loss2 = tf.reduce_mean(tf.abs(fake_B[1] - targets_half))  # Using targets[1] for img_B_half1
+        loss_fft = fft_loss(targets_half, fake_B[1])
+        loss2 = loss2 + loss_fft * 0.01
+        loss2 = (loss2 + loss3)/2
+        losses2.append(loss2)
+        fft_losses2.append(loss_fft)
+
+        # Compute loss and gradients for fake_B[2]
+        loss1 = tf.reduce_mean(tf.abs(fake_B[2] - targets))  # Using targets[0] for img_B
+        loss_fft = fft_loss(targets, fake_B[2])
+        loss1 = loss1 + loss_fft * 0.01
+        loss1 = (loss1 + loss2 + loss3)/3
+        losses1.append(loss1)
+        fft_losses1.append(loss_fft)
+
+    # Compute gradients and update weights for each output separately
+    gradients3 = tape3.gradient(loss3, autoencoder.get_layer("convo1k3s1f3l3").trainable_variables) 
+    optimizer3.apply_gradients(zip(gradients3, autoencoder.get_layer("convo1k3s1f3l3").trainable_variables))
+
+    gradients2 = tape2.gradient(loss2, autoencoder.get_layer("convo1k3s1f3l2").trainable_variables)
+    optimizer2.apply_gradients(zip(gradients2, autoencoder.get_layer("convo1k3s1f3l2").trainable_variables))
+
+    gradients1 = tape1.gradient(loss1, autoencoder.trainable_variables)
+    optimizer1.apply_gradients(zip(gradients1, autoencoder.trainable_variables))
+
+    return loss1, loss2, loss3
+
+# Define a directory to save the model checkpoints
+checkpoint_dir = "/content/drive/MyDrive/StartCode3/checkpoints/"
+os.makedirs(checkpoint_dir, exist_ok=True)
+
+# Define the global step variable
+global_step = tf.Variable(initial_value=0, trainable=False, dtype=tf.int64)
+
+# Create a checkpoint instance
+checkpoint = tf.train.Checkpoint(model=autoencoder, optimizer1=optimizer1, optimizer2=optimizer2, optimizer3=optimizer3, global_step=global_step)
+
+# Function to extract epoch number from checkpoint filename
+def extract_epoch_from_checkpoint(checkpoint_filename):
+    match = re.search(r'epoch_(\d+)_step', checkpoint_filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return None
+
+# Try to restore from the latest checkpoint
 latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
 if latest_checkpoint:
-    match = re.search(r'ckpt_(\d+)', latest_checkpoint) # extract the epoch number from the checkpoint file name
-    if match:
-        epoch_to_restore = int(match.group(1))
-    print("epoch_to_restore: ", epoch_to_restore)
+    print(f"Restoring from {latest_checkpoint}")
     checkpoint.restore(latest_checkpoint)
+    restored_epoch = extract_epoch_from_checkpoint(latest_checkpoint)
+    if restored_epoch is not None:
+        start_epoch = restored_epoch + 1
+        print(f"Resuming training from epoch {start_epoch}")
+    else:
+        start_epoch = 0
+    
+    # Restore the global_step value from the checkpoint
+    global_step.assign(int(latest_checkpoint.split('_')[-1].split('.')[0]))  # Extract and assign the step number
+    print("global_step number: ", global_step.numpy())
+else:
+    start_epoch = 0
 
-# set up the TensorBoard callback
-log_dir = "/content/drive/MyDrive/StartCode3/logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+# Define the summary writer
+log_dir = "/content/drive/MyDrive/StartCode3/logs/"
+summary_writer = tf.summary.create_file_writer(log_dir)
+summary_writer1 = tf.summary.create_file_writer(log_dir)
 
-num_epochs = 4000
-batch_count = numberofbatch*epoch_to_restore
-for epoch in range(epoch_to_restore, num_epochs):
-    print("Epoch {}/{}".format(epoch+1, num_epochs))
-    start_time_epoch = time.time()  # record start time
-    loss = 0
-    for number1 in range(numberofbatch):
-        start_time = time.time()  # record start time
-        numberofminibatch = len(train_data)
-        mini_batch = 0
-        for step, (inputs, targets) in enumerate(train_data):
-            start_timeb = time.time()  # record start time
-            loss = train_step(inputs, targets) 
-            end_timeb = time.time()  # record end time 
-        end_time = time.time()  # record end time 
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print("Epoch: {} in progress, Loss = {}, Batch Number: {}/{}, Time taken for a batch = {:.2f}s, Total Number of Mini-batch: {}, Time taken for a mini-batch = {:.2f}s, Current Time: {} ".format(epoch+1, loss.numpy(),  number1+1, numberofbatch, end_time - start_time, numberofminibatch, end_timeb - start_timeb, current_time))
-        with train_summary_writer1.as_default():
-            tf.summary.scalar('loss_level3', loss_level3.result(), step=batch_count)
-            tf.summary.scalar('loss_level2', loss_level2.result(), step=batch_count)
-            tf.summary.scalar('loss_level1', loss_level1.result(), step=batch_count)
-            tf.summary.scalar('fft_loss_level3', fft_loss_level3.result(), step=batch_count)
-            tf.summary.scalar('fft_loss_level2', fft_loss_level2.result(), step=batch_count)
-            tf.summary.scalar('fft_loss_level1', fft_loss_level1.result(), step=batch_count)
-        batch_count = batch_count + 1
-        # Reset metrics every batch
-        fft_loss_level3.reset_states()
-        fft_loss_level2.reset_states()
-        fft_loss_level1.reset_states()
-        loss_level3.reset_states()
-        loss_level2.reset_states()
-        loss_level1.reset_states()
-        # create the list of paths
-        input_batch_path = []
-        output_batch_path = []
-        for num1 in range(len(index4[number1+1])):
-            input_batch_path.append(input_paths[index4[number1+1][num1]])
-            output_batch_path.append(output_paths[index4[number1+1][num1]])
-        #load data
-        train_data = create_dataset(input_batch_path, output_batch_path)
-    # add loss to TensorBoard
-    loss_at_level1_epoch(loss)
-    with train_summary_writer2.as_default():
-        tf.summary.scalar('loss_at_level1_epoch', loss_at_level1_epoch.result(), step=epoch)
-    # Reset metrics every epoch
-    loss_at_level1_epoch.reset_states()
-    # save checkpoint every 30 epoch
-    if (epoch + 1) % 1 == 0:
-        checkpoint.save(file_prefix=checkpoint_prefix.format(epoch=epoch+1))
-        print("checkpoint_prefix.format(epoch=epoch): ", checkpoint_prefix.format(epoch=epoch+1))  
-    end_time_epoch = time.time()  # record end time  
-    print("Epoch {} is completed: Loss = {}, Batch Number: {}/{}, Time taken to complete a epoch = {:.2f}s, Current Time: {} ".format(epoch+1, loss.numpy(),  numberofbatch, numberofbatch, end_time_epoch - start_time_epoch, current_time))
-    random.shuffle(index)
-    index4 = indexing(index, 25)
-    input_batch_path = []
-    output_batch_path = []
-    for num1 in range(len(index4[0])):
-        input_batch_path.append(input_paths[index4[0][num1]])
-        output_batch_path.append(output_paths[index4[0][num1]])
-    #load data
-    train_data = create_dataset(input_batch_path, output_batch_path)
-    print("data loaded")
+for epoch in range(start_epoch, epochs):
+    print(f"Epoch {epoch}/{epochs}")
+    for batch_i, (input_batch, output_batch, length) in enumerate(dataloader.load_batches(input_paths_train, output_paths_train)):
+        # Convert input_batch and output_batch to numpy arrays
+        input_batch = np.array(input_batch)
+        output_batch = np.array(output_batch)
+
+        # Train the model on the current batch using the custom train_step function
+        loss1, loss2, loss3 = train_step(input_batch, output_batch)
+
+        # Print or log the losses if needed
+        print(f"Epoch: {epoch}/{epochs} - Batch: {batch_i+1:03d}/{length} - Losses: L1 {loss1:.4f}, L2 {loss2:.4f}, L3 {loss3:.4f}")
+
+        # Update the global step
+        global_step.assign_add(1)
+
+        # Write the losses to TensorBoard
+        with summary_writer.as_default():
+            tf.summary.scalar("loss1", loss1, step=global_step.numpy())
+            tf.summary.scalar("loss2", loss2, step=global_step.numpy())
+            tf.summary.scalar("loss3", loss3, step=global_step.numpy())
+
+    with summary_writer1.as_default():
+        tf.summary.scalar("loss1perEpoch", loss1, step=epoch)
+        tf.summary.scalar("loss2perEpoch", loss2, step=epoch)
+        tf.summary.scalar("loss3perEpoch", loss3, step=epoch)
+    # Save the model checkpoint with .ckpt extension
+    checkpoint_filename = f"epoch_{epoch:04d}_step_{global_step.numpy():08d}.ckpt"
+    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+    checkpoint.save(checkpoint_path)
+
+    # Call deblur_image and save_deblurred_images for test images
+    for i in range(len(input_paths_test)):
+        input_img_path = input_paths_test[i]
+        output_img_path = output_paths_test[i]
+        
+        # Call deblur_image function
+        deblurred_img = deblur_image(input_img_path, autoencoder)
+        
+        # Call save_deblurred_images function
+        save_deblurred_images(input_img_path, deblurred_img, output_img_path, epoch)
