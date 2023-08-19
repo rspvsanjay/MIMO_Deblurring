@@ -1,0 +1,23 @@
+{
+  "data_paths": {
+    "input_file": "/content/drive/MyDrive/StartCode3/input_train.txt",
+    "output_file": "/content/drive/MyDrive/StartCode3/output_train.txt",
+    "test_input_dir": "/content/drive/MyDrive/StartCode3/test_input/",
+    "test_output_dir": "/content/drive/MyDrive/StartCode3/test_output/"
+  },
+  "model_params": {
+    "num_filters": 64,
+    "batch_size": 16,
+    "epochs": 3500
+  },
+  "training_params": {
+    "optimizer_lr": 0.001,
+    "fft_loss_weight": 0.01,
+    "num_indexes": 40
+  },
+  "file_paths": {
+    "checkpoint_dir": "/content/drive/MyDrive/StartCode3/checkpoints/",
+    "log_dir": "/content/drive/MyDrive/StartCode3/logs/",
+    "deblurred_dir": "/content/drive/MyDrive/StartCode3/deblurred_images/"
+  }
+}
