@@ -4,11 +4,15 @@ from dataloader import DataLoader
 import tensorflow as tf
 from PIL import Image
 import numpy as np
+import threading
+import datetime
+import random
 import os
 import re
+
 # Load data using DataLoader
-input_file = "/content/drive/MyDrive/StartCode3/input_train_100.txt"
-output_file = "/content/drive/MyDrive/StartCode3/output_train_100.txt"
+input_file = "/content/drive/MyDrive/StartCode3/input_train.txt"
+output_file = "/content/drive/MyDrive/StartCode3/output_train.txt"
 
 with open(input_file, 'r') as f:
     input_paths = f.read().splitlines()
@@ -16,10 +20,14 @@ with open(input_file, 'r') as f:
 with open(output_file, 'r') as f:
     output_paths = f.read().splitlines()
 
+# Shuffle the input and output paths in the same order
+combined_paths = list(zip(input_paths, output_paths))
+random.shuffle(combined_paths)
+shuffled_input_paths, shuffled_output_paths = zip(*combined_paths)
+
 # Split the data into training and testing sets (90% training, 10% testing)
 input_paths_train, input_paths_test, output_paths_train, output_paths_test = train_test_split(
-    input_paths, output_paths, test_size=0.10, random_state=42
-)
+    shuffled_input_paths, shuffled_output_paths, test_size=0.10, random_state=42)
 
 # Instantiate the AutoEncoder model
 num_filters = 64
@@ -179,27 +187,80 @@ log_dir = "/content/drive/MyDrive/StartCode3/logs/"
 summary_writer = tf.summary.create_file_writer(log_dir)
 summary_writer1 = tf.summary.create_file_writer(log_dir)
 
+num_indexes = 40
+paths_per_index = len(input_paths_train) // num_indexes
+
+# Initialize ds3 as None globally
+ds2 = None
+# Define a function to load ds3
+def load_ds2(inpath, outpath):
+    global ds2
+    ds2 = dataloader.load_batches(inpath, outpath)
+    print("Ds2 loaded")
+
 for epoch in range(start_epoch, epochs):
     print(f"Epoch {epoch}/{epochs}")
-    for batch_i, (input_batch, output_batch, length) in enumerate(dataloader.load_batches(input_paths_train, output_paths_train)):
-        # Convert input_batch and output_batch to numpy arrays
-        input_batch = np.array(input_batch)
-        output_batch = np.array(output_batch)
+    # Shuffle the input and output paths in the same order
+    combined_paths = list(zip(input_paths_train, output_paths_train))
+    random.shuffle(combined_paths)
+    input_paths_train, output_paths_train = zip(*combined_paths)
 
-        # Train the model on the current batch using the custom train_step function
-        loss1, loss2, loss3 = train_step(input_batch, output_batch)
+    for i in range(num_indexes-1):
+        if i == 0:
+            start_idx = i * paths_per_index
+            end_idx = (i + 1) * paths_per_index
+            inpath1 = input_paths_train[start_idx:end_idx]
+            outpath1 = output_paths_train[start_idx:end_idx]
+            print("inpath1: ", inpath1)
+            print("inpath1 length: ", len(inpath1))
+            print("outpath1: ", outpath1)
+            print("outpath1 length: ", len(outpath1))
+            ds1 = dataloader.load_batches(inpath1, outpath1)
+            print("Ds1 loaded")
 
-        # Print or log the losses if needed
-        print(f"Epoch: {epoch}/{epochs} - Batch: {batch_i+1:03d}/{length} - Losses: L1 {loss1:.4f}, L2 {loss2:.4f}, L3 {loss3:.4f}")
+        start_idx = (i + 1) * paths_per_index
+        end_idx = (i + 2) * paths_per_index
+        inpath2 = input_paths_train[start_idx:end_idx]
+        outpath2 = output_paths_train[start_idx:end_idx]
+        print("inpath2: ", inpath2)
+        print("inpath2 length: ", len(inpath2))
+        print("outpath2: ", outpath2)
+        print("outpath2 length: ", len(outpath2))
 
-        # Update the global step
-        global_step.assign_add(1)
+        # Create a thread to load ds3 and pass inpath3 and outpath3 as arguments
+        load_ds2_thread = threading.Thread(target=load_ds2, args=(inpath2, outpath2))
+        # Start the thread
+        load_ds2_thread.start()
 
-        # Write the losses to TensorBoard
-        with summary_writer.as_default():
-            tf.summary.scalar("loss1", loss1, step=global_step.numpy())
-            tf.summary.scalar("loss2", loss2, step=global_step.numpy())
-            tf.summary.scalar("loss3", loss3, step=global_step.numpy())
+        for batch_i, (input_batch, output_batch, length) in enumerate(ds1):
+            # Convert input_batch and output_batch to numpy arrays
+            input_batch = np.array(input_batch)
+            output_batch = np.array(output_batch)
+
+            # Train the model on the current batch using the custom train_step function
+            loss1, loss2, loss3 = train_step(input_batch, output_batch)
+
+            # Get the current time
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # Print or log the losses with the current time
+            print(f"{current_time} - Epoch: {epoch}/{epochs} - Batch: {length*i + batch_i+1:03d}/{length*num_indexes} - Losses: L1 {loss1:.4f}, L2 {loss2:.4f}, L3 {loss3:.4f}")
+
+            # Update the global step
+            global_step.assign_add(1)
+
+            # Write the losses to TensorBoard
+            with summary_writer.as_default():
+                tf.summary.scalar("loss1", loss1, step=global_step.numpy())
+                tf.summary.scalar("loss2", loss2, step=global_step.numpy())
+                tf.summary.scalar("loss3", loss3, step=global_step.numpy())
+        # Wait for the thread to finish
+        load_ds2_thread.join()
+        ds1 = ds2
+        if i%8==0:
+            # Save the model checkpoint with .ckpt extension
+            checkpoint_filename = f"epoch_{epoch:04d}_step_{global_step.numpy():08d}_data_index_{i:02d}.ckpt"
+            checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+            checkpoint.save(checkpoint_path)
 
     with summary_writer1.as_default():
         tf.summary.scalar("loss1perEpoch", loss1, step=epoch)
