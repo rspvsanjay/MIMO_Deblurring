@@ -7,12 +7,36 @@ import numpy as np
 import threading
 import datetime
 import random
+import json
 import os
 import re
 
-# Load data using DataLoader
-input_file = "/content/drive/MyDrive/StartCode3/input_train.txt"
-output_file = "/content/drive/MyDrive/StartCode3/output_train.txt"
+# Load configuration from JSON file
+with open('/content/drive/MyDrive/StartCode3/Code3/config.json', 'r') as config_file:
+    config = json.load(config_file)
+
+# Data paths
+input_file = config['data_paths']['input_file']
+output_file = config['data_paths']['output_file']
+test_input_dir = config['data_paths']['test_input_dir']
+test_output_dir = config['data_paths']['test_output_dir']
+
+# Model parameters
+num_filters = config['model_params']['num_filters']
+batch_size = config['model_params']['batch_size']
+epochs = config['model_params']['epochs']
+
+# Training parameters
+learning_rate = config['training_params']['optimizer_lr']
+fft_loss_weight = config['training_params']['fft_loss_weight']
+num_indexes = config['training_params']['num_indexes']
+
+# File paths
+checkpoint_dir = config['file_paths']['checkpoint_dir']
+log_dir = config['file_paths']['log_dir']
+deblurred_dir = config['file_paths']['deblurred_dir']
+
+# Now you can use these variables in your code as before.
 
 with open(input_file, 'r') as f:
     input_paths = f.read().splitlines()
@@ -30,14 +54,13 @@ input_paths_train, input_paths_test, output_paths_train, output_paths_test = tra
     shuffled_input_paths, shuffled_output_paths, test_size=0.10, random_state=42)
 
 # Instantiate the AutoEncoder model
-num_filters = 64
 autoencoder = MIMO_Deblur()
 dataloader = DataLoader()
 
 # Define the optimizers
-optimizer1 = tf.keras.optimizers.Adam()
-optimizer2 = tf.keras.optimizers.Adam()
-optimizer3 = tf.keras.optimizers.Adam()
+optimizer1 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+optimizer2 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+optimizer3 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
 def deblur_image(img_path, model):
     # Load the blurry image from the given path
@@ -56,7 +79,6 @@ def deblur_image(img_path, model):
 
 def save_deblurred_images(original_img_path, deblurred_img, gt_path, epoch):
     original_dir, original_filename = os.path.split(original_img_path)
-    deblurred_dir = "/content/drive/MyDrive/StartCode3/deblurred_images/"
     os.makedirs(deblurred_dir, exist_ok=True)
 
     # Save the blurred image
@@ -86,10 +108,6 @@ def fft_loss(y_true, y_pred):
     fft_loss = tf.reduce_mean(tf.abs(y_true_fft - y_pred_fft))
     return fft_loss
 
-    
-# Training loop using train_step
-batch_size = 16
-epochs = 3500
 
 losses1 = []
 losses2 = []
@@ -147,7 +165,6 @@ def train_step(inputs, targets):
     return loss1, loss2, loss3
 
 # Define a directory to save the model checkpoints
-checkpoint_dir = "/content/drive/MyDrive/StartCode3/checkpoints/"
 os.makedirs(checkpoint_dir, exist_ok=True)
 
 # Define the global step variable
@@ -183,11 +200,10 @@ else:
     start_epoch = 0
 
 # Define the summary writer
-log_dir = "/content/drive/MyDrive/StartCode3/logs/"
 summary_writer = tf.summary.create_file_writer(log_dir)
 summary_writer1 = tf.summary.create_file_writer(log_dir)
 
-num_indexes = 40
+# num_indexes = 40
 paths_per_index = len(input_paths_train) // num_indexes
 
 # Initialize ds3 as None globally
@@ -206,14 +222,13 @@ for epoch in range(start_epoch, epochs):
     input_paths_train, output_paths_train = zip(*combined_paths)
 
     for i in range(num_indexes-1):
+        print("i: ", i)
         if i == 0:
             start_idx = i * paths_per_index
             end_idx = (i + 1) * paths_per_index
             inpath1 = input_paths_train[start_idx:end_idx]
             outpath1 = output_paths_train[start_idx:end_idx]
-            print("inpath1: ", inpath1)
             print("inpath1 length: ", len(inpath1))
-            print("outpath1: ", outpath1)
             print("outpath1 length: ", len(outpath1))
             ds1 = dataloader.load_batches(inpath1, outpath1)
             print("Ds1 loaded")
@@ -222,9 +237,7 @@ for epoch in range(start_epoch, epochs):
         end_idx = (i + 2) * paths_per_index
         inpath2 = input_paths_train[start_idx:end_idx]
         outpath2 = output_paths_train[start_idx:end_idx]
-        print("inpath2: ", inpath2)
         print("inpath2 length: ", len(inpath2))
-        print("outpath2: ", outpath2)
         print("outpath2 length: ", len(outpath2))
 
         # Create a thread to load ds3 and pass inpath3 and outpath3 as arguments
