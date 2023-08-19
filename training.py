@@ -1,3 +1,4 @@
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from sklearn.model_selection import train_test_split
 from networks import MIMO_Deblur
 from dataloader import DataLoader
@@ -27,12 +28,16 @@ batch_size = config['model_params']['batch_size']
 epochs = config['model_params']['epochs']
 
 # Training parameters
-learning_rate = config['training_params']['optimizer_lr']
+initial_learning_rate = config['training_params']['learning_rate']
 fft_loss_weight = config['training_params']['fft_loss_weight']
 num_indexes = config['training_params']['num_indexes']
+# Learning rate decay parameters
+learning_rate_decay_factor = config['training_params']['learning_rate_decay_factor']
+learning_rate_decay_epochs = config['training_params']['learning_rate_decay_epochs']
 
 # File paths
 checkpoint_dir = config['file_paths']['checkpoint_dir']
+sub_checkpoint_dir = config['file_paths']['sub_checkpoint_dir']
 log_dir = config['file_paths']['log_dir']
 deblurred_dir = config['file_paths']['deblurred_dir']
 
@@ -57,10 +62,15 @@ input_paths_train, input_paths_test, output_paths_train, output_paths_test = tra
 autoencoder = MIMO_Deblur()
 dataloader = DataLoader()
 
+# Create a learning rate schedule
+learning_rate_schedule = ExponentialDecay(
+    initial_learning_rate, learning_rate_decay_epochs, learning_rate_decay_factor, staircase=True
+)
+
 # Define the optimizers
-optimizer1 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-optimizer2 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-optimizer3 = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+optimizer1 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
+optimizer2 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
+optimizer3 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 
 def deblur_image(img_path, model):
     # Load the blurry image from the given path
@@ -272,7 +282,7 @@ for epoch in range(start_epoch, epochs):
         if i%8==0:
             # Save the model checkpoint with .ckpt extension
             checkpoint_filename = f"epoch_{epoch:04d}_step_{global_step.numpy():08d}_data_index_{i:02d}.ckpt"
-            checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+            checkpoint_path = os.path.join(sub_checkpoint_dir, checkpoint_filename)
             checkpoint.save(checkpoint_path)
 
     with summary_writer1.as_default():
