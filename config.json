@@ -11,12 +11,15 @@
     "epochs": 3500
   },
   "training_params": {
-    "optimizer_lr": 0.001,
+    "learning_rate": 1e-4,
+    "learning_rate_decay_factor": 0.5,
+    "learning_rate_decay_epochs": 500,
     "fft_loss_weight": 0.01,
     "num_indexes": 40
   },
   "file_paths": {
     "checkpoint_dir": "/content/drive/MyDrive/StartCode3/checkpoints/",
+    "sub_checkpoint_dir": "/content/drive/MyDrive/StartCode3/sub_checkpoints/",
     "log_dir": "/content/drive/MyDrive/StartCode3/logs/",
     "deblurred_dir": "/content/drive/MyDrive/StartCode3/deblurred_images/"
   }
