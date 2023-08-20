@@ -1,7 +1,8 @@
+from tensorflow._api.v2.image import psnr
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from sklearn.model_selection import train_test_split
-from networks import MIMO_Deblur
 from dataloader import DataLoader
+from networks import MIMO_Deblur
 import tensorflow as tf
 from PIL import Image
 import numpy as np
@@ -9,6 +10,7 @@ import threading
 import datetime
 import random
 import json
+import csv
 import os
 import re
 
@@ -40,6 +42,8 @@ checkpoint_dir = config['file_paths']['checkpoint_dir']
 sub_checkpoint_dir = config['file_paths']['sub_checkpoint_dir']
 log_dir = config['file_paths']['log_dir']
 deblurred_dir = config['file_paths']['deblurred_dir']
+avg_psnr_before_file = config['file_paths']['avg_psnr_before']
+avg_psnr_after_file = config['file_paths']['avg_psnr_after']
 
 # Now you can use these variables in your code as before.
 
@@ -64,13 +68,35 @@ dataloader = DataLoader()
 
 # Create a learning rate schedule
 learning_rate_schedule = ExponentialDecay(
-    initial_learning_rate, learning_rate_decay_epochs, learning_rate_decay_factor, staircase=True
-)
+    initial_learning_rate, learning_rate_decay_epochs, learning_rate_decay_factor, staircase=True)
 
 # Define the optimizers
 optimizer1 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 optimizer2 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
 optimizer3 = tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule)
+
+# Function to calculate PSNR between two images
+def calculate_psnr(image1, image2):
+    image1 = image1/np.max(image1)
+    image2 = image2/np.max(image2)
+    mse = np.mean((image1 - image2) ** 2)
+    max_pixel = 1.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return psnr
+
+# def calculate_psnr2(image1, image2):
+#     # Read images from file.
+#     im1 = tf.convert_to_tensor(image1)
+#     im2 = tf.convert_to_tensor(image2)
+#     # Compute PSNR over tf.uint8 Tensors.
+#     psnr1 = tf.image.psnr(im1, im2, max_val=255)
+#     print("psnr1: ", psnr1)
+
+#     # Compute PSNR over tf.float32 Tensors.
+#     im1 = tf.convert_to_tensor(image1, dtype=tf.float32) / 255.0
+#     im2 = tf.convert_to_tensor(image2, dtype=tf.float32) / 255.0
+#     psnr2 = tf.image.psnr(im1, im2, max_val=1.0)
+#     print("psnr2: ", psnr2)
 
 def deblur_image(img_path, model):
     # Load the blurry image from the given path
@@ -87,15 +113,16 @@ def deblur_image(img_path, model):
     deblurred_img = Image.fromarray(deblurred_img_array)
     return deblurred_img
 
+
 def save_deblurred_images(original_img_path, deblurred_img, gt_path, epoch):
     original_dir, original_filename = os.path.split(original_img_path)
     os.makedirs(deblurred_dir, exist_ok=True)
 
     # Save the blurred image
-    original_img = Image.open(original_img_path)
+    original_blur_img = Image.open(original_img_path)
     original_filename1 = "blur_" + original_filename
     original_img_path = os.path.join(deblurred_dir, original_filename1)
-    original_img.save(original_img_path)
+    original_blur_img.save(original_img_path)
 
     # Save the deblurred image
     deblurred_filename = "deblur_" + f'epoch{epoch:04d}_' + original_filename
@@ -103,12 +130,15 @@ def save_deblurred_images(original_img_path, deblurred_img, gt_path, epoch):
     deblurred_img.save(deblurred_img_path)
 
     # Save the Sharp image
-    original_img = Image.open(gt_path)
+    original_sharp_img = Image.open(gt_path)
     original_dir, original_filename = os.path.split(gt_path)
     original_filename2 = "sharp_"+ original_filename
     original_img_path = os.path.join(deblurred_dir, original_filename2)
-    original_img.save(original_img_path)
+    original_sharp_img.save(original_img_path)
+    psnr1 = calculate_psnr(original_blur_img, original_sharp_img)
+    psnr2 = calculate_psnr(deblurred_img, original_sharp_img)
 
+    return psnr1, psnr2
 
 def fft_loss(y_true, y_pred):
     # Compute the FFT of the ground-truth and predicted images
@@ -224,6 +254,8 @@ def load_ds2(inpath, outpath):
     ds2 = dataloader.load_batches(inpath, outpath)
     print("Ds2 loaded")
 
+avg_psnr_before = []
+avg_psnr_after = []
 for epoch in range(start_epoch, epochs):
     print(f"Epoch {epoch}/{epochs}")
     # Shuffle the input and output paths in the same order
@@ -232,7 +264,6 @@ for epoch in range(start_epoch, epochs):
     input_paths_train, output_paths_train = zip(*combined_paths)
 
     for i in range(num_indexes-1):
-        print("i: ", i)
         if i == 0:
             start_idx = i * paths_per_index
             end_idx = (i + 1) * paths_per_index
@@ -259,15 +290,12 @@ for epoch in range(start_epoch, epochs):
             # Convert input_batch and output_batch to numpy arrays
             input_batch = np.array(input_batch)
             output_batch = np.array(output_batch)
-
             # Train the model on the current batch using the custom train_step function
             loss1, loss2, loss3 = train_step(input_batch, output_batch)
-
             # Get the current time
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             # Print or log the losses with the current time
             print(f"{current_time} - Epoch: {epoch}/{epochs} - Batch: {length*i + batch_i+1:03d}/{length*num_indexes} - Losses: L1 {loss1:.4f}, L2 {loss2:.4f}, L3 {loss3:.4f}")
-
             # Update the global step
             global_step.assign_add(1)
 
@@ -294,6 +322,8 @@ for epoch in range(start_epoch, epochs):
     checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
     checkpoint.save(checkpoint_path)
 
+    psnr_before = []
+    psnr_after = []
     # Call deblur_image and save_deblurred_images for test images
     for i in range(len(input_paths_test)):
         input_img_path = input_paths_test[i]
@@ -303,4 +333,27 @@ for epoch in range(start_epoch, epochs):
         deblurred_img = deblur_image(input_img_path, autoencoder)
         
         # Call save_deblurred_images function
-        save_deblurred_images(input_img_path, deblurred_img, output_img_path, epoch)
+        psnr1, psnr2 = save_deblurred_images(input_img_path, deblurred_img, output_img_path, epoch)
+        psnr_before.append(psnr1)
+        psnr_after.append(psnr2)
+
+    print("Average PSNR before deblur: ", np.mean(psnr_before))
+    print("Average PSNR aftre deblur: ", np.mean(psnr_after))
+    avg_psnr_before.append(np.mean(psnr_before))
+    avg_psnr_after.append(np.mean(psnr_after))
+        
+    # Open the CSV file in write mode
+    with open(avg_psnr_before_file, 'w', newline='') as csv_file:
+        # Create a CSV writer
+        csv_writer = csv.writer(csv_file)
+        # Write the header row to the CSV file
+        csv_writer.writerow(avg_psnr_before)
+
+    # Open the CSV file in write mode
+    with open(avg_psnr_after_file, 'w', newline='') as csv_file:
+        # Create a CSV writer
+        csv_writer = csv.writer(csv_file)
+        # Write the header row to the CSV file
+        csv_writer.writerow(avg_psnr_after)
+    print(f"avg_psnr_after has been written to {avg_psnr_before_file}")
+    print(f"avg_psnr_after has been written to {avg_psnr_after_file}")
